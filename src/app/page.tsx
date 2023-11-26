@@ -1,113 +1,162 @@
-import Image from 'next/image'
+"use client";
+
+import React, { MouseEventHandler, useRef } from "react";
+
+import {
+  Box,
+  Button,
+  Card,
+  Flex,
+  Grid,
+  Inset,
+  Text,
+  TextFieldInput,
+} from "@radix-ui/themes";
+import Link from "next/link";
+import { AiOutlineLoading3Quarters } from "react-icons/ai";
+import { Background, ReactFlow } from "reactflow";
+
+import TitlePanel from "@/components/TitlePanel";
+import { useFigmaContext } from "@/context/figmaContext";
+import { BlueprintFile, useFilesContext } from "@/context/filesContext";
+
+function getFileKey(pageUrl: string) {
+  const parser = document.createElement("a");
+  parser.href = pageUrl;
+  return parser.pathname.replace("/file/", "").replace(/\/.*/, "");
+}
+
+async function importFile(token: string, file: any): Promise<BlueprintFile> {
+  const fileKey = getFileKey(file);
+  const apiUrl = `https://api.figma.com/v1/files/${fileKey}`;
+  const figmaFileContents = await fetch(apiUrl, {
+    headers: {
+      "X-Figma-Token": token,
+    },
+  });
+  const contents = await figmaFileContents.json();
+  return {
+    id: fileKey,
+    name: contents.name,
+    figmaFileContents: contents,
+    editorState: {
+      nodes: [],
+      edges: [],
+    },
+  };
+}
+
+const ImportFilePanel = () => {
+  const { token, setToken } = useFigmaContext();
+  const { saveFile } = useFilesContext();
+
+  const fileUrlInputRef = useRef<HTMLInputElement>(null);
+
+  const handleImportFile: MouseEventHandler = (e) => {
+    const fileUrl = fileUrlInputRef.current?.value;
+
+    if (!token || !fileUrl) return;
+
+    importFile(token, fileUrl).then((file) => {
+      saveFile(file);
+    });
+  };
+
+  return (
+    <Card>
+      <Text as="div" size="2" weight="bold">
+        Import file
+      </Text>
+      <Flex gap="4" align="end">
+        <Box>
+          <Text size="1">File URL</Text>
+          <TextFieldInput
+            ref={fileUrlInputRef}
+            placeholder="https://www.figma.com/file/..."
+            type="url"
+          />
+        </Box>
+        <Box>
+          <Text size="1">Personal access token</Text>
+          <TextFieldInput
+            value={token ? token : ""}
+            onChange={(e) => setToken(e.target.value)}
+            type="password"
+          />
+        </Box>
+        <Button onClick={handleImportFile}>Import</Button>
+      </Flex>
+    </Card>
+  );
+};
 
 export default function Home() {
+  const { files } = useFilesContext();
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 max-w-5xl w-full items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:h-auto lg:w-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{' '}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
-            />
-          </a>
-        </div>
+    <div className="relative isolate">
+      <Flex className="absolute top-6 left-6 z-10" direction="column" gap="3">
+        <TitlePanel />
+        <Card>
+          <Box>
+            <Text as="div" size="2" weight="bold" className="mb-2">
+              Recent files
+            </Text>
+            {files === null && (
+              <div className="bg-black/10 p-4 flex items-center h-[157px] justify-center rounde-md w-full">
+                <AiOutlineLoading3Quarters className="h-6 w-6 animate-spin" />
+              </div>
+            )}
+            {files && Object.keys(files).length === 0 && (
+              <Text>No files found.</Text>
+            )}
+            {files && (
+              <Grid columns="4" className="w-full">
+                {files &&
+                  Object.keys(files).map((fileKey) => (
+                    <Card
+                      className="relative"
+                      key={
+                        files[fileKey].figmaFileContents?.document?.id ||
+                        files[fileKey].figmaFileContents?.id
+                      }
+                      size="2"
+                    >
+                      <Link
+                        href={`/file/${fileKey}`}
+                        className="absolute inset-0"
+                      >
+                        <span className="sr-only">
+                          {`Link to file: ${files[fileKey].name}`}
+                        </span>
+                      </Link>
+                      <Inset clip="padding-box" side="top" pb="current">
+                        <img
+                          src={
+                            files[fileKey].figmaFileContents?.thumbnailUrl ||
+                            files[fileKey].figmaFileContents?.document
+                              ?.thumbnailUrl
+                          }
+                          alt="Bold typography"
+                          className="w-full h-[100px] bg-[#1E1E1E] block object-cover"
+                        />
+                      </Inset>
+                      <Text as="p" size="2">
+                        {files[fileKey].name}
+                      </Text>
+                    </Card>
+                  ))}
+              </Grid>
+            )}
+          </Box>
+        </Card>
+        <ImportFilePanel />
+      </Flex>
+      <div className="h-[100vh] w-[100vw] bg-[#1E1E1E] pointer-events-none">
+        <ReactFlow>
+          <Background gap={16} />
+        </ReactFlow>
       </div>
-
-      <div className="relative flex place-items-center before:absolute before:h-[300px] before:w-[480px] before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-[240px] after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 before:lg:h-[360px] z-[-1]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className="mb-32 grid text-center lg:max-w-5xl lg:w-full lg:mb-0 lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Docs{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Learn{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Templates{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className={`mb-3 text-2xl font-semibold`}>
-            Deploy{' '}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className={`m-0 max-w-[30ch] text-sm opacity-50`}>
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
-  )
+    </div>
+  );
 }
